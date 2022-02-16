@@ -1,0 +1,103 @@
+import pandas as pd
+import os
+
+# First part of script loops over all the files in the import folder and processes them. Once each file is processed it
+# is split into calibration data and trending data and appended to separate CSVs ready for the next operation
+
+
+# Creates header lines for both csv files
+headers = ("Solution Label", "Date", "Al 396.152", "As 188.980", "Ca 317.933", "Cd 214.439", "Co 228.615",
+           "Cr 267.716", "Cu 327.395", "Fe 259.940", "Mg 279.553", "Ni 231.604", "Pb 220.353", "Sb 217.582",
+           "Ti 336.122", "V 292.401", "Zn 213.857")
+
+
+# Defines calibration solution labels (cal_inj) and injections we don't use (waste_inj).
+cal_inj = ["Blank", "Standard 1", "Standard 2", "Standard 3", "Standard 4", "Standard 5"]
+waste_inj = ["PPT 1 STD 2", "PPT 2 STD 1", "WASH"]
+
+# Creates data frame of headers
+df = pd.DataFrame(headers)
+
+# Transposes data row to 1 row
+df = df.T
+
+# Creates CSV files for trend and cal data and adds headers
+df.to_csv('TM01a_Trend.csv', index=False, header=False)
+df.to_csv('TM21_Trend.csv', index=False, header=False)
+df.to_csv('TM01a_Cal.csv', index=False, header=False)
+df.to_csv('TM21_Control.csv', index=False, header=False)
+df.to_csv('TM01a_Control.csv', index=False, header=False)
+
+# Sets directory for import files
+directory_in_str = r'C:\Users\tom.whittington\Documents\Old_Data\TM01a\2021\02-Feb'
+directory = os.fsencode(directory_in_str)
+
+# Loops script over every file in directory
+for file in os.scandir(directory):
+    filename = os.fsdecode(file)
+
+    # Data is imported with headers and footers removed.
+    df = pd.read_csv(filename, header=3, skipfooter=4, engine='python')
+    TM21_inj = []
+
+    filt = df["Act Wgt"] > 4.5
+
+    df_TM21 = df[filt]
+
+    if not df_TM21.empty:
+        tm21_blank_label = df_TM21.iloc[0]["Solution Label"]
+        tm21_control_label = df_TM21.iloc[15]["Solution Label"]
+        df_TM21 = df_TM21.pivot_table(values="Corr Con", index=["Solution Label", "Date"], columns="Element")
+        df_TM21_blank = df_TM21.loc[tm21_blank_label]
+        df_TM21 = df_TM21 - df_TM21_blank
+        df_TM21 = df_TM21.drop(tm21_blank_label)
+        df_TM21_control = df_TM21.loc[tm21_control_label]
+        df_TM21_control.to_csv('TM21_Control.csv', mode='a', header=False)
+        df_TM21 = df_TM21.drop(tm21_control_label)
+        df_TM21.to_csv('TM21_Trend.csv', mode='a', header=False)
+
+    # Calibration Data
+    # Unneeded data is dropped from the calibration dataframe (df_cal).
+    # Data is pivoted into a table indexed by the solution label and date.
+    # Then selects the calibration injections using list of solution labels defined in cal_inj.
+    # Data is then saved to a CSV file
+
+    filt = df["Act Wgt"] < 4.5
+    df = df[filt]
+    print(df)
+    df_cal = df[["Solution Label", "Element", "Date", "Int"]]
+    df_cal_table = df_cal.pivot_table(values="Int", index=["Solution Label", "Date"], columns="Element")
+    df_cal_table = df_cal_table.loc[cal_inj]
+    df_cal_table.to_csv('TM01a_Cal.csv', mode='a', header=False)
+
+    # Sample Data
+    # Unneeded data is dropped from the calibration dataframe (df_samp).
+    # Data is pivoted into a table indexed by the solution label and date.
+    # Calibration solutions (cal_inj) and unused solutions (waste_inj) are dropped from dataframe
+
+    df = df[["Solution Label", "Element", "Corr Con", "Date", "Time"]]
+    blank_label = df.iloc[69]["Solution Label"]
+    control_label = df.iloc[84]["Solution Label"]
+
+    df = df.replace(to_replace="(?i)Wash\s?", value="WASH", regex=True)
+    df = df.pivot_table(values="Corr Con", index=["Solution Label", "Date", ], columns="Element")
+    df = df.drop(cal_inj)
+    df = df.drop(waste_inj)
+
+    # Blank injection is defined and blank correction is performed and then dropped from data frame
+    df_blank = df.loc[blank_label]
+    df = df - df_blank
+    df = df.drop(blank_label)
+
+    # Control sample is defined and appended to csv file before being dropped from data frame
+    df_control = df.loc[control_label]
+    df_control.to_csv('TM01a_Control.csv', mode='a', header=False)
+    df = df.drop(control_label)
+
+    # Al results are converted to alumina and rounded before being appended to csv file
+    df["Al 396.152"] = df["Al 396.152"] * 1.89
+    df = round(df, 2)
+
+    df.to_csv('TM01a_Trend.csv', mode='a', header=False)
+
+    continue
