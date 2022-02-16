@@ -1,0 +1,104 @@
+Option Explicit
+
+' Dimension all variables.
+   Dim DestFile As String
+   Dim FileNum As Integer
+   Dim Column_Count As Long
+   Dim Row_Count As Long
+   Dim Method As String
+   Dim Start As Range
+
+Sub QuoteCommaExport()
+   
+   
+   
+   Method = ActiveSheet.Name
+
+   ' Prompt user for destination file name.
+   DestFile = "W:\Analytical Group\Control Charts\ICP - 720\TM Sample Importer\Import Files\" & VBA.Format(Now(), "yyyyMMdd") & "-" & " " & Method & ".sin"
+
+   ' Obtain next free file handle number.
+   FileNum = FreeFile()
+
+  ' Turn error checking off.
+   On Error Resume Next
+
+   ' Attempt to open destination file for output.
+   Open DestFile For Output As #FileNum
+
+   ' If an error occurs report it and end.
+   If Err <> 0 Then
+      MsgBox "Cannot open filename " & DestFile
+      End
+   End If
+
+   ' Turn error checking on.
+   On Error GoTo 0
+   
+   'Select start of samples
+   Set Start = Range("AE9")
+   
+   'Start iterrator
+   Call Iterr
+   
+   If Range("P10") <> "" Then
+    Set Start = Range("AM9")
+    Call Iterr
+   End If
+   
+   'Select start of standards
+   Set Start = Range("AE33")
+   
+   'Start iterrator
+   Call Iterr
+    
+    ' Close destination file.
+   Close #FileNum
+   
+   MsgBox "Samples Saved"
+   
+End Sub
+    
+Function Iterr():
+   
+    Start.Select
+    
+    Row_Count = 0
+    Column_Count = 0
+    
+    Do Until ActiveCell.Value = ""
+        Row_Count = Row_Count + 1
+        ActiveCell.Offset(1, 0).Select
+    Loop
+    
+   ' Loop for each row in selection.
+   For Row_Count = 0 To Row_Count - 1
+
+   ' Loop for each column in selection.
+      For Column_Count = 0 To 7
+
+        ' Write current cell's text to file with quotation marks.
+            If IsNumeric(Start.Offset(Row_Count, Column_Count)) Then
+                Print #FileNum, Start.Offset(Row_Count, Column_Count).Text;
+            
+            Else: Print #FileNum, """" & Start.Offset(Row_Count, Column_Count).Text & """";
+            
+            End If
+
+         ' Check if cell is in last column.
+         If Column_Count = 7 Then
+            ' If so, then write a blank line.
+            Print #FileNum,
+         Else
+            ' Otherwise, write a comma.
+            Print #FileNum, ",";
+         End If
+      ' Start next iteration of ColumnCount loop.
+      Next Column_Count
+   ' Start next iteration of RowCount loop.
+   Next Row_Count
+   
+   
+
+
+End Function

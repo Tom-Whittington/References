@@ -1,0 +1,232 @@
+Option Explicit
+Option Compare Text
+
+    Dim Method As String 'Which method is trying to be imported
+    Dim MethodElementNumber As Long 'How many elements SHOULD be tested on each sample
+    Dim Headers As Variant 'Stores headers
+    Dim SSTArray As Variant 'Stores SST data
+    Dim ColCount As Long 'Counts the number of columns
+    Dim SSTRowNumber As Long 'Counts how many rows are in the SST
+    Dim RunDate As Date 'Saves the date on which the run was completed
+
+
+
+Sub ImportArray()
+
+    Dim SampleElementNumber As Long 'How many elements are tested on each sample
+    Dim StartElement As String 'Defines first element to be tested
+    Dim SMPArray As Variant 'Stores sample information
+    Dim TM21Array As Variant 'Stores TM21 data in separate array to TM01a if both are run together
+    Dim Samplenumber As Long 'Counts how many samples are in the run
+    Dim TM21SampleNumber As Long 'Counts how many TM21 samples are in the run if ran with TM01a
+    Dim TM21 As Boolean 'Stores if the run contains TM21 samples
+    Dim FileToOpen As Variant 'checks if import file was actually clicked or if cancel was
+    Dim OpenBook As Workbook 'stores the import file
+    
+    
+    Application.Calculation = xlManual
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    
+    On Error GoTo Error
+    
+    Call Getmethod 'Defines what method is required based on which sheet the import button is clicked on
+    
+    FileToOpen = Application.GetOpenFilename(Title:="Browse for your File & Import Range", FileFilter:="Excel Files (*.csv*),*csv*") 'opens file open dialogue, only displays CSV files
+    
+    If FileToOpen <> False Then 'checks if open file was clicked
+        
+        Sheets(Method & " CSV").Select
+        Cells.Select
+        Selection.ClearContents 'Clears raw data sheet
+        
+        Set OpenBook = Application.Workbooks.Open(FileToOpen, Local:=True)
+        
+        Rows("1:3").Delete 'Gets rid of meta data in first few lines of export
+        
+        Do Until ActiveCell.Value = "" 'Scrolls through columns adding 1 to Colcounter (makes columns dynamic)
+                 If ActiveCell.Value = "Element" Then 'When it finds Element, it counts up how many elements are in a sample (different in standards)
+                        ActiveCell.Offset(1, 0).Select
+                        SampleElementNumber = SampleElementNumber + 1
+                        StartElement = ActiveCell.Value 'Sets the first element so it knows when to complete the loop
+                        ActiveCell.Offset(1, 0).Select
+                            Do Until ActiveCell.Value = StartElement
+                                ActiveCell.Offset(1, 0).Select
+                                SampleElementNumber = SampleElementNumber + 1
+                                
+                            Loop
+                            
+                        ActiveCell.Offset(-(SampleElementNumber + 1), 0).Select 'Jumps back into the headers row once number of elements has been counted
+                    End If
+                    
+                    If ActiveCell.Value = "Date" Then
+                            RunDate = ActiveCell.Offset(1, 0).Value 'sets the date which is used for naming the SST data
+                    End If
+                    ActiveCell.Offset(0, 1).Select
+                    ColCount = ColCount + 1
+                
+        Loop
+        
+        ActiveCell.Offset(0, -ColCount).Select 'Once columns have been counted jumps back to "A1"
+        
+        If SampleElementNumber <> MethodElementNumber Then 'Checks if the import file is the correct method
+            GoTo WrongMethod
+        End If
+        
+        Headers = Range(ActiveCell, ActiveCell.Offset(0, ColCount)).Value 'Sets the headers array
+        
+        ActiveCell.Offset(1, 0).Select 'Selects first line of data
+        
+        Do Until ActiveCell.Value = "WASH" 'Loops through the SST to find how many rows there are
+                ActiveCell.Offset(1, 0).Select
+                SSTRowNumber = SSTRowNumber + 1
+        Loop
+        
+        SSTArray = Range(ActiveCell.Offset(-1, 0), ActiveCell.Offset(-SSTRowNumber, ColCount)).Value 'Sets the SST array
+        ActiveCell.Offset(SampleElementNumber, 0).Select 'skips over wash to get to the samples
+        
+        'Call ExportSSTData 'calls function to save SSt data
+        
+        Do Until ActiveCell.Value = "WASH" Or ActiveCell.Value = "WASH " 'loops through sample data (in jumps of however many elements there were in the SST blank) counting the samples
+            ActiveCell.Offset(SampleElementNumber, 0).Select
+            Samplenumber = Samplenumber + 1
+        Loop
+        
+        SMPArray = Range(ActiveCell.Offset(-1, 0), ActiveCell.Offset((-SampleElementNumber * Samplenumber), ColCount)).Value 'Sets the sample array as number of samples * elements =rows and column counter for columns
+        
+        If ActiveCell.Offset(SampleElementNumber, 0).Value = "UNI BLANK" Then 'Checks to see if TM21 data is after TM01a
+            Method = "TM21"
+            TM21 = True
+            
+            ActiveCell.Offset(SampleElementNumber, 0).Select 'Skips over wash into TM21 sample data
+            
+            Do Until ActiveCell.Value = "WASH" Or ActiveCell.Value = "WASH " 'Loops through counting TM21 samples in jumps of elements in blank
+                TM21SampleNumber = TM21SampleNumber + 1
+                ActiveCell.Offset(SampleElementNumber, 0).Select
+            Loop
+            
+            TM21Array = Range(ActiveCell.Offset(-1, 0), ActiveCell.Offset((-SampleElementNumber * TM21SampleNumber), ColCount)).Value 'Sets TM21 array
+            ActiveWorkbook.Close 'Closes raw data workbook
+            
+            Sheets(Method & " CSV").Activate
+            Range("A1").Activate
+            Sheets(Method & " CSV").Range(ActiveCell, ActiveCell.Offset(0, ColCount)).Value = Headers
+            Sheets(Method & " CSV").Range(ActiveCell.Offset(1, 0), ActiveCell.Offset((SampleElementNumber * TM21SampleNumber), ColCount)).Value = TM21Array 'Adds headers and data to TM21 raw data page
+            Erase TM21Array
+            Method = "TM01a" 'Switches back to TM01a ready for pasting data in
+        End If
+        
+        If TM21 = False Then
+            ActiveWorkbook.Close 'closes raw data workbook if not already closed
+        End If
+        
+        Sheets(Method & " CSV").Activate
+        Range("A1").Activate
+        Sheets(Method & " CSV").Range(ActiveCell, ActiveCell.Offset(0, ColCount)).Value = Headers
+        Sheets(Method & " CSV").Range(ActiveCell.Offset(1, 0), ActiveCell.Offset(SampleElementNumber * Samplenumber, ColCount)).Value = SMPArray 'adds headers and data to raw data page
+        Erase SMPArray 'Erases sample data array
+        Sheets(Method & " Results").Activate 'Returns to results page
+        
+        Else
+            Application.Calculation = xlAutomatic
+            Application.DisplayAlerts = True
+            Application.ScreenUpdating = True
+                
+            Exit Sub 'exits sub and turns updates and alerts back on if cancel is clicked on import window
+        
+    End If
+    
+    
+    Application.Calculation = xlAutomatic
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True 'resets alerts and updates after import
+    MsgBox "Import Successful"
+    
+    Exit Sub
+
+WrongMethod: 'If wrong method import file is selected then workbook is closed and updates are turned back on
+    OpenBook.Close
+    Sheets(Method & " Results").Select
+    Application.Calculation = xlAutomatic
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "Incorrect Method Imported"
+    
+    Exit Sub
+    
+Error:
+    Application.Calculation = xlAutomatic
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True 'resets alerts and updates after error
+    OpenBook.Close
+    Sheets(Method & " Results").Activate
+    MsgBox "Import Unsuccessful"
+    
+
+
+End Sub
+
+Function Getmethod() 'gets the method name and also sets the number of elements tested for each run. This is used to check the import file is for the correct method
+
+
+    If ActiveSheet.name = "TM01a Results" Then
+        Method = "TM01a"
+        MethodElementNumber = 15
+        
+    ElseIf ActiveSheet.name = "TM20a Results" Then
+        Method = "TM20a"
+        MethodElementNumber = 13
+        
+    ElseIf ActiveSheet.name = "TM01g Results" Then
+        Method = "TM01g"
+        MethodElementNumber = 1
+        
+    ElseIf ActiveSheet.name = "TM21 Results" Then
+        Method = "TM21"
+        MethodElementNumber = 15
+        
+    End If
+
+
+
+
+End Function
+
+
+
+Function ExportSSTData()
+
+    Dim folderpathmonth As String 'Folder path for the month
+    Dim folderpathyear As String 'folder path for the year
+    Dim FilePath As String 'Defines file path for SST data saving
+    Dim FSO As Scripting.FileSystemObject
+
+    folderpathyear = "W:\Analytical Group\Control Charts\ICP - 720\TM Calibration Raw Data\" & Method & "\" & VBA.Format(RunDate, "yyyy")
+    folderpathmonth = folderpathyear & "\" & VBA.Format(RunDate, "mm-MMM")
+    FilePath = folderpathmonth & "\" & VBA.Format(RunDate, "yyMMdd") & "-" & " Calibration Data"
+    
+    Set FSO = New Scripting.FileSystemObject
+    
+    If Not FSO.FolderExists(folderpathyear) Then 'checks if folder exists and if not then creates it
+            FSO.CreateFolder (folderpathyear)
+    End If
+    
+    If Not FSO.FolderExists(folderpathmonth) Then 'checks if folder exists and if not then creates it
+            FSO.CreateFolder (folderpathmonth)
+    End If
+    
+    Workbooks.Add 'adds new workbook
+    Range(ActiveCell, ActiveCell.Offset(0, ColCount)).Value = Headers 'prints headers array in row 1
+    Range(ActiveCell.Offset(1, 0), ActiveCell.Offset(SSTRowNumber, ColCount)).Value = SSTArray 'prints SST array from row 2 down
+        
+    With ActiveWorkbook 'Saves SST workbook to filepath as CSV
+        .SaveAs Filename:=FilePath, FileFormat:=xlOpenXMLWorkbook, Local:=True
+        .Close SaveChanges:=True
+    End With
+
+    Erase SSTArray
+
+End Function
+
+
+

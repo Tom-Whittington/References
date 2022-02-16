@@ -1,0 +1,320 @@
+Option Explicit
+Option Compare Text
+
+    Dim Headers As Variant 'Stores headers
+    Dim Method As String 'Defines which method is being used
+    Dim LIMSResultStartRange As Range, TrendStartRange As Range 'Defines the start range for both upload arrays (Usually first column of headers)
+    Dim LIMSSampleIDStart As Range, LIMSAnalysisStart As Range, LIMSTestStart As Range
+    Dim RunDate As Date 'Sets the date on which the run was completed
+    Public AuthoriserUsername As String 'Defines the chosen authorisers username (from frmEmailResults)
+    Dim AuthoriserEmail As String 'Defines the authorisers email adrress
+    Dim AuthoriserName As String 'Defines the chosen authorisers actual name
+    Dim Environname As String 'Defines the environname of the user
+    Dim Username As String 'Defines the name of the user (generated from the environname of the user)
+    Dim EmailWorkbookTempfilepath As String 'Defines the temporary file path for the email results file which is deleted after being emailed.
+    Dim FSO As Scripting.FileSystemObject
+    Dim EmailFreezeRow As Long, EmailFreezeColumn As Long 'Defines the freeze pane positions for emailed workbook
+
+Sub ExportArray()
+    
+    
+    Application.Calculation = xlManual
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    
+    On Error GoTo Error
+        
+    Call Getmethod
+    Set FSO = New Scripting.FileSystemObject
+    RunDate = Sheets(Method & " CSV").Range("J2") 'saves the run date
+            
+    frmEmailResults.Show
+            
+    If AuthoriserUsername <> "" Then 'checks if cross was clicked on userform
+        Call LIMSUpload
+        Call SaveTrendData
+                
+        If AuthoriserUsername <> "Saveonly" Then 'checks if user clicked save only data and if so skips email function
+            Call EmailInfo
+            Call EmailResults
+        End If
+                    
+        Sheets(Method & " Results").Select
+        Range("A1").Select
+                    
+        Application.Calculation = xlAutomatic
+        Application.DisplayAlerts = True
+        Application.ScreenUpdating = True
+        MsgBox "Upload Complete"
+        
+        Exit Sub
+                
+    End If
+        
+        Application.Calculation = xlAutomatic
+        Application.DisplayAlerts = True
+        Application.ScreenUpdating = True
+        Exit Sub
+    
+Error:
+        If FSO.FileExists(EmailWorkbookTempfilepath & (".xlsm")) Then
+            Kill EmailWorkbookTempfilepath & (".xlsm")
+        End If
+        Application.Calculation = xlAutomatic
+        Application.DisplayAlerts = True
+        Application.ScreenUpdating = True
+        MsgBox "An Error Occured"
+        
+    End Sub
+
+Function Getmethod() 'Defines the method being run by the sheet on which the export button was clicked. Also sets start ranges for LIMS upload and save results macro, and defines where the freeze panes start.
+
+
+    If ActiveSheet.name = "TM01a Results" Then
+        Method = "TM01a"
+        Set LIMSResultStartRange = Range("G9")
+        Set LIMSSampleIDStart = Range("F8")
+        Set LIMSAnalysisStart = Range("AD9")
+        Set LIMSTestStart = Range("AU9")
+        Set TrendStartRange = Sheets(Method & " Raw Data").Range("F30")
+        EmailFreezeRow = 29
+        EmailFreezeColumn = 7
+        
+    ElseIf ActiveSheet.name = "TM20a Results" Then
+        Method = "TM20a"
+        Set LIMSResultStartRange = Range("AM9")
+        Set LIMSSampleIDStart = Range("AL8")
+        Set LIMSAnalysisStart = Range("AD9")
+        Set LIMSTestStart = Range("AH9")
+        Set TrendStartRange = Sheets(Method & " Raw Data").Range("F26")
+        EmailFreezeRow = 29
+        EmailFreezeColumn = 8
+        
+    ElseIf ActiveSheet.name = "TM01g Results" Then
+        Method = "TM01g"
+        Set LIMSResultStartRange = Range("G9")
+        Set LIMSSampleIDStart = Range("F8")
+        Set LIMSAnalysisStart = Range("AD9")
+        Set LIMSTestStart = Range("AG9")
+        Set TrendStartRange = Sheets(Method & " Raw Data").Range("F26")
+        
+    ElseIf ActiveSheet.name = "TM21 Results" Then
+        Method = "TM21"
+        Set LIMSResultStartRange = Range("G9")
+        Set LIMSSampleIDStart = Range("F8")
+        Set LIMSAnalysisStart = Range("AD9")
+        Set LIMSTestStart = Range("AU9")
+        Set TrendStartRange = Sheets(Method & " Raw Data").Range("F30")
+        EmailFreezeRow = 29
+        EmailFreezeColumn = 7
+        
+    End If
+
+End Function
+
+Function LIMSUpload() 'Generates a CSV file with LIMS results in and saves it to the automatic upload folder
+    
+    Dim LIMSResultArray() As Variant 'This array stores the results that will be uploaded to LIMS (Only elements on spec)
+    Dim LIMSAnalysisArray() As Variant 'This array stores the analysis name for each element for each product
+    Dim LIMSTestArray() As Variant 'This array stores the test name for each element for each product
+    Dim LIMSSamplecounter As Long 'Counts where LIMS upload macro currently is up to during export(how far down the table)
+    Dim LIMSResultcounter As Long 'Counts where LIMS upload macro currently is up to during export(how far across the row for one sample)
+    Dim LIMSRows As Long, LIMSColumns As Long 'Defines how many total rows and columns are in the LIMS upload array
+    Dim LIMSFilePath As String 'Defines what filepath the LIMS data save file will have
+    Dim LIMSUploadWorkbook As Workbook 'Defines the name of the workbook that contains LIMS data
+    Dim Product As String
+    
+    
+    
+    LIMSSampleIDStart.Select 'Selects top of sample ID column so number of samples can be calculated
+    
+    Do Until ActiveCell.Offset(1, 0).Value = 0 'counts how many rows of results there are
+        LIMSRows = LIMSRows + 1
+        ActiveCell.Offset(1, 0).Select
+    Loop
+    
+    LIMSColumns = Range(LIMSSampleIDStart, LIMSSampleIDStart.End(xlToRight)).Cells.Count - 2 'Counts how many columns there are (15 elements+product column and samplenumber column)
+    LIMSFilePath = "C:\Users\tom.whittington\Documents\" & Method & "-" & VBA.Format(RunDate, "yyyy-MM-dd")
+    
+    LIMSResultArray = Range(LIMSResultStartRange, LIMSResultStartRange.Offset(LIMSRows, LIMSColumns)) 'builds array, headers in first row,sample numbers in first column
+    LIMSAnalysisArray = Range(LIMSAnalysisStart, LIMSAnalysisStart.Offset(LIMSRows, LIMSColumns)) ' Builds array of analysis names
+    LIMSTestArray = Range(LIMSTestStart, LIMSTestStart.Offset(LIMSRows, LIMSColumns)) ' Builds array of test names
+
+    Set LIMSUploadWorkbook = Workbooks.Open(Filename:="W:\Analytical Group\Control Charts\ICP - 720\TM_LIMS_Template.xlsx")
+    
+    For LIMSSamplecounter = 1 To LIMSRows
+        Product = LIMSResultStartRange.Offset(LIMSSamplecounter - 1, LIMSColumns).Value
+        If Product <> "ARF" And Left(Product, 3) <> "IND" And LIMSResultArray(LIMSSamplecounter, 1) <> "" Then 'if product is ARF or indonesian product or doesnt have sample number then it wont be exported
+            For LIMSResultcounter = 2 To LIMSColumns
+                If LIMSResultArray(LIMSSamplecounter, LIMSResultcounter) <> "" Then 'skips if no value is found
+                
+                     ActiveCell.Value = LIMSResultArray(LIMSSamplecounter, 1) 'sample number
+                     ActiveCell.Offset(0, 1).Value = LIMSResultArray(LIMSSamplecounter, LIMSResultcounter) 'result
+                     ActiveCell.Offset(0, 2).Value = LIMSAnalysisArray(LIMSSamplecounter, LIMSResultcounter) 'analysis name
+                     ActiveCell.Offset(0, 3).Value = LIMSTestArray(LIMSSamplecounter, LIMSResultcounter) ' test name
+                     ActiveCell.Offset(1, 0).Select ' moves to next sample
+                     
+                End If
+            Next LIMSResultcounter 'sets counter to next results
+            End If
+    LIMSResultcounter = 1 'resets counter for start of the new line
+    Next LIMSSamplecounter 'Sets counter down a sample
+    
+    Erase LIMSResultArray
+    Erase LIMSAnalysisArray
+    Erase LIMSTestArray
+    
+    With LIMSUploadWorkbook
+        .SaveAs Filename:=LIMSFilePath, FileFormat:=xlCSV  'copies the LIMS results and saves it as the temp file path
+        .Close SaveChanges:=False
+    End With
+
+End Function
+
+
+Function SaveTrendData()
+
+    Dim TrendFilePath As String 'Defines what filepath the trending data save file will have
+    Dim Trendfolderpathyear As String 'Defines the year part of the folder path for trending data
+    Dim Trendfolderpathmonth As String 'Defines the month part of the folder path for trending data
+    Dim TrendResultsArray As Variant 'This array stores the results that will be saved for trending (All elements)
+    Dim TrendRows As Long, TrendColumns As Long 'Defines how many total rows and columns are in the trending upload array
+    Dim TrendDataWorkbook As Workbook 'Defines the name of the workbook that contains trending data
+    
+    Trendfolderpathyear = "W:\Analytical Group\Control Charts\ICP - 720\TM Sample Raw Data\" & Method & "\" & VBA.Format(RunDate, "yyyy")
+    Trendfolderpathmonth = Trendfolderpathyear & "\" & VBA.Format(RunDate, "mm-MMM")
+    TrendFilePath = Trendfolderpathmonth & "\" & VBA.Format(RunDate, "yyMMdd") & "-" & " Sample data"
+    
+    Set FSO = New Scripting.FileSystemObject
+    
+    If Not FSO.FolderExists(Trendfolderpathyear) Then 'checks if folder exists and if not then creates it
+            FSO.CreateFolder (Trendfolderpathyear)
+    End If
+    
+    If Not FSO.FolderExists(Trendfolderpathmonth) Then 'checks if folder exists and if not then creates it
+            FSO.CreateFolder (Trendfolderpathmonth)
+    End If
+        
+    Sheets(Method & " Raw Data").Select
+    TrendStartRange.Select
+    Headers = Range(TrendStartRange, TrendStartRange.Offset.End(xlToRight)) 'builds the array which stores the blank corrected result data from the raw data page
+    TrendColumns = UBound(Headers, 2)
+    ActiveCell.Offset(1, 0).Select
+    TrendRows = 0
+    
+    Do Until ActiveCell.Value = 0 'counts how many rows of results there are
+        TrendRows = TrendRows + 1
+        ActiveCell.Offset(1, 0).Select
+    Loop
+
+    TrendResultsArray = Range(TrendStartRange.Offset(2, 0), TrendStartRange.Offset(TrendRows, TrendColumns))
+    Set TrendDataWorkbook = Workbooks.Add 'adds workbook to save data in
+    Range(ActiveCell, ActiveCell.Offset(0, TrendColumns - 1)) = Headers
+    Range(ActiveCell.Offset(1, 0), ActiveCell.Offset(TrendRows - 1, TrendColumns - 1)) = TrendResultsArray
+   
+    With TrendDataWorkbook
+        .SaveAs Filename:=TrendFilePath, FileFormat:=xlOpenXMLWorkbook, Local:=True
+        .Close SaveChanges:=True 'saves the results data in the sample data folder
+    End With
+    
+    Sheets(Method & " Results").Select
+    
+   Erase Headers
+   Erase TrendResultsArray
+    
+End Function
+Function EmailInfo()
+
+' sets the authorisers email address and the users' name depending on which button was clicked on the userform
+
+    If AuthoriserUsername = "Tom" Then
+        AuthoriserEmail = "Tom.Whittington@pqcorp.com"
+        AuthoriserName = "Tom"
+        
+    ElseIf AuthoriserUsername = "Josh" Then
+        AuthoriserEmail = "Joshua.Pearce@pqcorp.com"
+        AuthoriserName = "Josh"
+        
+    ElseIf AuthoriserUsername = "Lisa" Then
+        AuthoriserEmail = "Lisa.Whittall@pqcorp.com"
+        AuthoriserName = "Lisa"
+        
+    ElseIf AuthoriserUsername = "Ellie" Then
+        AuthoriserEmail = "Eleanor.Bradbury@pqcorp.com"
+        AuthoriserName = "Ellie"
+        
+    ElseIf AuthoriserUsername = "Chaz" Then
+        AuthoriserEmail = "Charanjeev.Saund@pqcorp.com"
+        AuthoriserName = "Chaz"
+        
+    End If
+    
+    Environname = Environ("username")
+    
+    If Environname = "Tom.Whittington" Then
+        Username = "Tom"
+        
+    ElseIf Environname = "jpearce" Then
+        Username = "Josh"
+        
+    ElseIf Environname = "lwhittall" Then
+        Username = "Lisa"
+        
+    ElseIf Environname = "Eleanor.Bradbury" Then
+        Username = "Ellie"
+        
+    ElseIf Environname = "csaund" Then
+        Username = "Chaz"
+        
+    End If
+    
+End Function
+
+
+Function EmailResults()
+    
+    Dim EmailWorkBook As Workbook 'Defines the name of the workbook that will be emailed
+    Dim OLApp As Outlook.Application
+    Dim OLEmail As Outlook.MailItem
+    Set OLApp = New Outlook.Application
+    Set OLEmail = OLApp.CreateItem(olMailItem)
+    
+    EmailWorkbookTempfilepath = Environ("userprofile") & "\documents\" & VBA.Format(RunDate, "yyyyMMdd") & "-" & Method 'Names the temporary file path for the copy of the results page
+    
+    Sheets(Method & " Results").Select
+    Cells.Select 'copies active sheets values and not formulae
+    Selection.Copy
+    
+    Set EmailWorkBook = Workbooks.Add
+    Cells.Select
+    Selection.PasteSpecial Paste:=xlPasteFormats, Operation:=xlNone, _
+        SkipBlanks:=False, Transpose:=False
+    Selection.PasteSpecial Paste:=xlPasteValuesAndNumberFormats, Operation:= _
+        xlNone, SkipBlanks:=False, Transpose:=False
+    
+    If Method <> "TM01g" Then 'freezes frame on export file to make data entry easier (TM01g doesn't need it as only 1 element)
+        Cells(EmailFreezeRow, EmailFreezeColumn).Select
+        ActiveWindow.FreezePanes = True
+        EmailFreezeRow = 0
+        EmailFreezeColumn = 0
+    End If
+    
+    With EmailWorkBook
+        .SaveAs Filename:=EmailWorkbookTempfilepath, FileFormat:=xlOpenXMLWorkbookMacroEnabled 'copies the results page and saves it as the temp file path
+        .Close SaveChanges:=False
+    End With
+    
+    With OLEmail
+        .BodyFormat = olFormatHTML
+        .Attachments.Add (EmailWorkbookTempfilepath & ".xlsm")
+        .To = AuthoriserEmail
+        .Subject = Method & " (" & RunDate & ")"
+        .Body = "Hi " & AuthoriserName & "," & vbNewLine & vbNewLine & vbTab & "Please could you authorise these results for me?" & vbNewLine & vbNewLine & "Thanks," & vbNewLine & Username
+        .Send
+        
+    End With 'Opens new email, writes the body, attaches the file and sends the email
+    
+    Kill EmailWorkbookTempfilepath & (".xlsm") ' deletes the temp file
+    Unload frmEmailResults 'closes the email userform
+
+End Function

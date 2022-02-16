@@ -1,0 +1,107 @@
+Option Explicit
+
+    Dim StartRange As Range 'Defines the first Record
+    Dim LIMSConn As ADODB.Connection 'Defines the connection to the database
+    Dim SampleInfoRS As ADODB.Recordset 'Defines the record set we are going to retrieve results in
+    Dim SampleInfoStoredProcedure As ADODB.Command 'Defines the stored procedure we are going to use
+    Dim NoRecords As Long 'Counts the number of records unsuccessfully retreived
+    Dim Records As Long 'Counts the number of records successfully retreived
+
+Sub GetSampleInfo()
+    
+    On Error GoTo Err
+    
+    Application.Calculation = xlManual
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    
+    Set LIMSConn = New ADODB.Connection 'instances connection
+    Set StartRange = Range("I10")
+    NoRecords = 0
+    Records = 0
+    
+    LIMSConn.ConnectionString = _
+        "Provider=...;" & _
+        "Server=...;" & _
+        "Database=...;" & _
+        "Trusted_Connection=yes;" & _
+        "DataTypeCompatibility=80;" 'Allows correct mapping of data types for new driver version (might not need). Rest of the code stores the Connection parameters
+        
+    LIMSConn.Open 'Opens the connection to LIMS
+    
+    Set SampleInfoStoredProcedure = New ADODB.Command 'instances the stored procedure
+    
+    With SampleInfoStoredProcedure
+        .ActiveConnection = LIMSConn
+        .CommandType = adCmdStoredProc
+        .CommandText = " " 'Stored procedure name
+        .Parameters.Refresh
+        .NamedParameters = True
+    End With
+    
+    Call Loop_Over_Records
+    
+    If Range("AM12") <> "" Then
+        Set StartRange = Range("P10")
+        Call Loop_Over_Records
+    End If
+    
+    LIMSConn.Close
+    
+    MsgBox "Operation completed with:" & vbCrLf & Records & " Samples' Information found and " & vbCrLf & NoRecords & " Invalid Batch/Pallet combinations found", vbDefaultButton1, "Operation Complete"
+    NoRecords = 0
+    Records = 0
+    StartRange.Select 'Displays a message box displaying the amount of records retrieved sucessfully and unsuccessfully.
+    
+    Application.Calculation = xlAutomatic 'Turns updates back on
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    
+    Exit Sub
+        
+Err:
+    SampleInfoRS.Close 'Closes the connection and record set, resets counters to 0, reselects the start range and turns on updates. If an error occurs.
+    LIMSConn.Close
+    NoRecords = 0
+    Records = 0
+    StartRange.Select
+    MsgBox "An error occured"
+    Application.Calculation = xlAutomatic
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    
+End Sub
+    
+    
+    
+    Function Loop_Over_Records():
+    
+    StartRange.Select
+    
+    Do Until ActiveCell.Value = "" 'Loops through each sample, retrieving sample numbers and products until it reaches a blank cell
+    
+        With SampleInfoStoredProcedure 'Stores each records batch and pallet number
+            .Parameters("@Batch").Value = ActiveCell.Value
+            .Parameters("@Pallet").Value = ActiveCell.Offset(0, 1).Value
+        End With
+        
+        Set SampleInfoRS = SampleInfoStoredProcedure.Execute 'Runs the stored procedure using the parameters set above
+        
+        If SampleInfoRS.BOF And SampleInfoRS.EOF Then 'If record couldnt be found for batch/pallet combo then sample number/product is set to null
+            ActiveCell.Offset(0, -2).Value = "NULL"
+            ActiveCell.Offset(0, -1).Value = "ARF"
+            ActiveCell.Offset(1, 0).Select
+            NoRecords = NoRecords + 1 'Counts how many records retrieved unsuccessfully
+                       
+        Else 'If record does exist then it prints out the record set and moves onto the next sample
+            ActiveCell.Offset(0, -2).CopyFromRecordset SampleInfoRS
+            ActiveCell.Offset(1, 0).Select
+            Records = Records + 1 'Counts how many records retrieved successfully
+        End If
+        
+    Loop
+    
+    SampleInfoRS.Close 'Once an empty cell has been reached the connection and record set are closed.
+    SampleInforRS = Nothing
+    
+End Function

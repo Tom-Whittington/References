@@ -1,0 +1,113 @@
+Option Explicit
+Option Compare Text
+
+Dim Initials As String
+Dim Method As String
+Dim ChartPath As String
+Dim Chartname As String
+Dim SubmitStartRange As Range
+Dim SSTStartRange As Range
+Dim InitialOffset As Integer 'How many columns away from the start column is the analyst initial column
+Dim Sheetname As String
+Dim Environname As String
+Dim lastrow As Integer
+Dim column As String
+Dim SSToffset As Integer
+
+Sub SubmitSST()
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    On Error GoTo Err
+    
+    Call Getmethod
+    Call GetInitials
+    
+    Range(SubmitStartRange, SubmitStartRange.End(xlToRight)).Select
+    Selection.Copy
+    Workbooks.Open Filename:=ChartPath
+    Workbooks(Chartname).Activate
+    Worksheets(Sheetname).Activate
+    
+    lastrow = Cells(Rows.Count, column).End(xlUp).Row
+    Range(Range(column & lastrow + 1), Range(column & lastrow + 1).Offset(0, SSToffset)).Select
+    Selection.PasteSpecial xlPasteValues
+    ActiveCell.Offset(0, InitialOffset).Value = Initials
+    
+    'SSTUpload = True
+    
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+    
+    Exit Sub
+    
+Err:
+    MsgBox "upload unsuccessful", vbCritical
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+
+
+End Sub
+
+Function GetInitials()
+
+Environname = Environ("username")
+    
+    If Environname = "Tom.whittington" Then
+        Initials = "TW"
+    ElseIf Environname = "Joshua.pearce" Then
+        Initials = "JP"
+    ElseIf Environname = "lwhittall" Then
+        Initials = "LW"
+    ElseIf Environname = "Eleanor.Bradbury" Then
+        Initials = "EB"
+    ElseIf Environname = "csaund" Then
+        Initials = "CS"
+    End If
+    
+End Function
+
+Function Getmethod() 'Sets the SST parameters. Each control chart was set up with different formats so a lot of settings are needed
+
+    If ActiveSheet.name = "TM01a Results" Then
+        Set SubmitStartRange = Range("F24")
+        column = "B"
+        ChartPath = "W:\Analytical Group\Control Charts\ICP - 720\Precips Metals TM01a.xlsx"
+        Chartname = "Precips Metals TM01a.xlsx"
+        Sheetname = "PRECIPS METALS SST Raw Data"
+        Set SSTStartRange = Range("b1645")
+        InitialOffset = 14
+        SSToffset = 13
+        
+    ElseIf ActiveSheet.name = "TM20a Results" Then
+        Set SubmitStartRange = Range("G20")
+        column = "B"
+        ChartPath = "W:\Analytical Group\Control Charts\ICP - 720\Heavy Metals TM20a SST.xlsx"
+        Chartname = "Heavy Metals TM20a SST.xlsx"
+        Sheetname = "Heavy Metals SST Raw Data"
+        Set SSTStartRange = Range("B1540")
+        InitialOffset = 13
+        SSToffset = 12
+        
+    ElseIf ActiveSheet.name = "TM01g Results" Then
+        Set SubmitStartRange = Range("F19")
+        column = "C"
+        ChartPath = "W:\Analytical Group\Control Charts\ICP - 720\Leachable Aluminium TM01g SST.xlsx"
+        Chartname = "Leachable Aluminium TM01g SST.xlsx"
+        Sheetname = "Leachable Al Data"
+        Set SSTStartRange = Range("C22")
+        InitialOffset = 2
+    
+    ElseIf ActiveSheet.name = "TM21 Results" Then
+        Set SubmitStartRange = Range("F24")
+        column = "C"
+        ChartPath = "W:\Analytical Group\Control Charts\ICP - 720\Unilever Metals TM21 SST.xlsx"
+        Chartname = "Unilever Metals TM21 SST.xlsx"
+        Sheetname = "Raw Data"
+        Set SSTStartRange = Range("C12").End(xlDown).Offset(0, 1)
+        InitialOffset = 11
+    End If
+
+End Function
+

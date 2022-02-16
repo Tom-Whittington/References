@@ -1,0 +1,52 @@
+Option Explicit
+
+Sub WritingTableToCells()
+
+    Dim HeaderStart As Range
+    Dim StartRange As Range
+    Dim ColumnCount As Long
+    Dim RowCount As Long
+    Dim CellCount As Long
+    Dim Colstart As Range
+    Dim ColumnCounter As Long
+    Dim Method As String
+    Dim objTable As ListObject
+    
+    Set StartRange = Application.InputBox( _
+      Title:="Table Parameters", _
+      prompt:="Select where you want your table to appear", _
+      Type:=8)
+      
+    Set Colstart = StartRange.Offset(0, 1)
+    CellCount = 1
+    
+    Method = Application.InputBox("Which Method are you using?", "Table Parameters")
+    RowCount = Application.InputBox("How many rows do you want?", "Table Parameters")
+    ColumnCount = Application.InputBox("How many Elements do you want?", "Table Parameters")
+    ColumnCounter = ColumnCount
+    
+    StartRange.Value = "Sample ID"
+    
+    For ColumnCounter = 1 To ColumnCount
+        StartRange.Offset(0, ColumnCounter).Value = "Element " & ColumnCounter
+    Next ColumnCounter
+    
+    ActiveCell.Offset(1, 0).Select
+
+    For RowCount = 1 To RowCount
+        ActiveCell.Formula = "='" & Method & " CSV'!A" & ((RowCount * ColumnCount) - (ColumnCount - 2))
+        ActiveCell.Offset(0, 1).Activate
+        For ColumnCounter = 1 To ColumnCount
+            CellCount = CellCount + 1
+            ActiveCell.Formula = "='" & Method & " CSV'!G" & CellCount
+            ActiveCell.Offset(0, 1).Activate
+        Next ColumnCounter
+        StartRange.Offset(RowCount + 1, 0).Activate
+        ColumnCounter = 1
+    Next RowCount
+
+    Range(StartRange, StartRange.Offset(RowCount, ColumnCount)).Select
+    
+    Set objTable = ActiveSheet.ListObjects.Add(xlSrcRange, Selection, , xlYes)
+
+End Sub

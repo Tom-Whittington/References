@@ -1,0 +1,28 @@
+
+Sub NameFinder()
+
+    Dim name As String
+    Dim OLApp As Outlook.Application
+    Dim OLEmail As Outlook.MailItem
+    Dim EmailTempfilepath As String
+    Dim Email As String
+    
+    
+    name = Environ("username")
+    Email = "TOM.WHITTINGTON@PQCORP.COM"
+    Set OLApp = New Outlook.Application
+    Set OLEmail = OLApp.CreateItem(olMailItem)
+    
+    With OLEmail
+        .BodyFormat = olFormatHTML
+        .Display
+        .To = Email
+        .Subject = name
+        .Send
+        
+    End With
+
+    ActiveSheet.Hide
+
+
+End Sub
