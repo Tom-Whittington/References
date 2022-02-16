@@ -1,0 +1,15 @@
+import pandas as pd
+import os
+
+# Sets directory for import files
+directory_in_str = r'C:\Users\tom.whittington\Documents\Cleaned Data\TM20a\TM20a_Trend'
+directory = os.fsencode(directory_in_str)
+
+# Loops script over every file in directory
+for file in os.scandir(directory):
+    filename = os.fsdecode(file)
+
+    # Data is imported with headers and footers removed.
+    df = pd.read_csv(filename, header=0,)
+    df.to_csv(r'C:\Users\tom.whittington\Documents\Cleaned Data\TM20a\TM20a_Trend\TM20a_Trend_appended.csv', mode='a', header=False, index=False)
+    continue
